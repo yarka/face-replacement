@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Character Replacement - MVP</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="header-content">
+                <div class="header-text">
+                    <h1>🎬 Character Replacement</h1>
+                    <p class="subtitle">Замена персонажа в видео с помощью AI</p>
+                </div>
+                <button id="gallery-btn" class="gallery-btn">
+                    📸 Gallery <span id="gallery-count" class="gallery-count">(0)</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- Upload Section -->
+        <section id="upload-section" class="section">
+            <h2>1. Загрузите файлы или вставьте ссылки</h2>
+
+            <!-- Mode Toggle -->
+            <div class="mode-toggle">
+                <button id="mode-file" class="mode-btn active">📁 Загрузить файлы</button>
+                <button id="mode-url" class="mode-btn">🔗 Вставить ссылки</button>
+            </div>
+
+            <!-- File Upload Mode -->
+            <div id="file-mode" class="upload-mode">
+                <div class="upload-grid">
+                <!-- Character Image Upload -->
+                <div class="upload-box">
+                    <label for="character-input" class="upload-label">
+                        <div class="upload-content">
+                            <span class="icon">🖼️</span>
+                            <h3>Character Image</h3>
+                            <p>Картинка персонажа</p>
+                            <p class="hint">JPG, PNG, WebP</p>
+                        </div>
+                        <input type="file" id="character-input" accept="image/jpeg,image/png,image/webp" hidden>
+                    </label>
+                    <div id="character-preview" class="preview hidden"></div>
+                </div>
+
+                <!-- Reference Video Upload -->
+                <div class="upload-box">
+                    <label for="reference-input" class="upload-label">
+                        <div class="upload-content">
+                            <span class="icon">🎥</span>
+                            <h3>Reference Video</h3>
+                            <p>Референс с движениями</p>
+                            <p class="hint">MP4, MOV</p>
+                        </div>
+                        <input type="file" id="reference-input" accept="video/mp4,video/quicktime" hidden>
+                    </label>
+                    <div id="reference-preview" class="preview hidden"></div>
+                </div>
+                </div>
+
+                <div class="tips">
+                    <h4>💡 Советы для лучшего результата:</h4>
+                    <ul>
+                        <li>Лицо должно быть чётко видно</li>
+                        <li>Хороший свет, не закрывайте лицо руками</li>
+                        <li>Начните с 6-10 секунд видео</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- URL Mode -->
+            <div id="url-mode" class="upload-mode hidden">
+                <div class="url-inputs">
+                    <div class="url-input-box">
+                        <label for="character-url-input">🖼️ Character Image URL:</label>
+                        <input
+                            type="url"
+                            id="character-url-input"
+                            placeholder="https://example.com/character.jpg"
+                            class="url-input"
+                        >
+                        <p class="hint">Прямая ссылка на картинку персонажа</p>
+                    </div>
+
+                    <div class="url-input-box">
+                        <label for="reference-url-input">🎥 Reference Video URL:</label>
+                        <input
+                            type="url"
+                            id="reference-url-input"
+                            placeholder="https://example.com/video.mp4"
+                            class="url-input"
+                        >
+                        <p class="hint">Прямая ссылка на референс видео</p>
+                    </div>
+                </div>
+
+                <div class="tips">
+                    <h4>💡 Примеры подходящих ссылок:</h4>
+                    <ul>
+                        <li>Cloudinary: https://res.cloudinary.com/...</li>
+                        <li>Imgur: https://i.imgur.com/...</li>
+                        <li>S3: https://bucket.s3.amazonaws.com/...</li>
+                        <li>Любой прямой URL к файлу</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- Presets Section -->
+        <section id="presets-section" class="section hidden">
+            <h2>⚡ Quick Presets</h2>
+            <p class="hint">Выберите готовый пресет для быстрой настройки</p>
+
+            <div class="presets-grid">
+                <button class="preset-btn" data-preset="tiktok">
+                    <span class="preset-icon">🎵</span>
+                    <div class="preset-info">
+                        <span class="preset-name">TikTok</span>
+                        <span class="preset-desc">9:16 Вертикальное</span>
+                    </div>
+                </button>
+
+                <button class="preset-btn" data-preset="instagram">
+                    <span class="preset-icon">📸</span>
+                    <div class="preset-info">
+                        <span class="preset-name">Instagram</span>
+                        <span class="preset-desc">1:1 Квадратное</span>
+                    </div>
+                </button>
+
+                <button class="preset-btn" data-preset="youtube">
+                    <span class="preset-icon">▶️</span>
+                    <div class="preset-info">
+                        <span class="preset-name">YouTube</span>
+                        <span class="preset-desc">16:9 Широкоформатное</span>
+                    </div>
+                </button>
+
+                <button class="preset-btn" data-preset="professional">
+                    <span class="preset-icon">💼</span>
+                    <div class="preset-info">
+                        <span class="preset-name">Professional</span>
+                        <span class="preset-desc">Деловой стиль</span>
+                    </div>
+                </button>
+            </div>
+        </section>
+
+        <!-- Settings Section -->
+        <section id="settings-section" class="section hidden">
+            <h2>3. Настройки (опционально)</h2>
+
+            <div class="settings-grid">
+                <!-- Aspect Ratio -->
+                <div class="setting">
+                    <label for="ratio-select">Формат видео:</label>
+                    <select id="ratio-select">
+                        <option value="1280:720">16:9 (Widescreen)</option>
+                        <option value="720:1280">9:16 (Portrait)</option>
+                        <option value="960:960">1:1 (Square)</option>
+                        <option value="1104:832">4:3 (Landscape)</option>
+                        <option value="832:1104">3:4 (Portrait)</option>
+                        <option value="1584:672">21:9 (Ultrawide)</option>
+                    </select>
+                </div>
+
+                <!-- Expression Intensity -->
+                <div class="setting">
+                    <label for="intensity-slider">
+                        Интенсивность выражений: <span id="intensity-value">3</span>
+                    </label>
+                    <input type="range" id="intensity-slider" min="1" max="5" value="3" step="1">
+                    <p class="hint">1 = слабая, 5 = сильная</p>
+                </div>
+
+                <!-- Body Control -->
+                <div class="setting">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="body-control" checked>
+                        <span>Контроль движений тела</span>
+                    </label>
+                    <p class="hint">Включить перенос движений тела из референса</p>
+                </div>
+            </div>
+
+            <button id="generate-btn" class="btn btn-primary">
+                🚀 Сгенерировать видео
+            </button>
+        </section>
+
+        <!-- Status Section -->
+        <section id="status-section" class="section hidden">
+            <h2>⏳ Генерация...</h2>
+
+            <div class="status-card">
+                <div class="progress-bar">
+                    <div id="progress-fill" class="progress-fill"></div>
+                </div>
+                <p id="status-text" class="status-text">Загрузка...</p>
+                <p class="hint">Это может занять несколько минут</p>
+            </div>
+        </section>
+
+        <!-- Result Section -->
+        <section id="result-section" class="section hidden">
+            <h2>✅ Готово!</h2>
+
+            <div class="result-card">
+                <!-- Comparison View -->
+                <div id="comparison-container" class="comparison-container">
+                    <div class="comparison-wrapper">
+                        <div class="video-side video-side-left">
+                            <div class="video-label">Reference</div>
+                            <video id="reference-comparison-video" loop muted class="comparison-video"></video>
+                        </div>
+                        <div class="video-side video-side-right">
+                            <div class="video-label">Generated</div>
+                            <video id="result-comparison-video" loop muted class="comparison-video"></video>
+                        </div>
+                        <div id="comparison-slider" class="comparison-slider">
+                            <div class="slider-handle"></div>
+                        </div>
+                    </div>
+                    <div class="comparison-controls">
+                        <button id="play-comparison" class="btn-icon" title="Play/Pause">
+                            ▶️
+                        </button>
+                        <button id="toggle-view" class="btn btn-secondary">
+                            🔄 Switch to Single View
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Single Video View -->
+                <div id="single-view-container" class="single-view-container hidden">
+                    <video id="result-video" controls class="result-video"></video>
+                    <button id="toggle-comparison" class="btn btn-secondary" style="margin-top: 16px;">
+                        🔀 Switch to Comparison View
+                    </button>
+                </div>
+
+                <div class="result-actions">
+                    <a id="download-btn" class="btn btn-primary" download>
+                        ⬇️ Скачать видео
+                    </a>
+                    <button id="again-btn" class="btn btn-secondary">
+                        🔄 Создать ещё
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Error Section -->
+        <section id="error-section" class="section hidden">
+            <h2>❌ Ошибка</h2>
+
+            <div class="error-card">
+                <p id="error-text"></p>
+                <button id="retry-btn" class="btn btn-primary">
+                    🔄 Попробовать снова
+                </button>
+            </div>
+        </section>
+    </div>
+
+    <!-- Gallery Modal -->
+    <div id="gallery-modal" class="modal hidden">
+        <div class="modal-overlay" id="gallery-overlay"></div>
+        <div class="modal-content gallery-modal-content">
+            <div class="modal-header">
+                <h2>📸 Generation History</h2>
+                <button class="modal-close" id="gallery-close">✕</button>
+            </div>
+            <div class="modal-body">
+                <div id="gallery-grid" class="gallery-grid">
+                    <!-- Gallery items will be inserted here -->
+                </div>
+                <div id="gallery-empty" class="gallery-empty hidden">
+                    <p>Пока нет сохраненных генераций</p>
+                    <p class="hint">Создайте первое видео и оно автоматически появится здесь!</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Gallery Item Detail Modal -->
+    <div id="gallery-detail-modal" class="modal hidden">
+        <div class="modal-overlay" id="detail-overlay"></div>
+        <div class="modal-content detail-modal-content">
+            <div class="modal-header">
+                <h2>Video Details</h2>
+                <button class="modal-close" id="detail-close">✕</button>
+            </div>
+            <div class="modal-body" id="detail-body">
+                <!-- Detail content will be inserted here -->
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
