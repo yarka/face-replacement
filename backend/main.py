@@ -264,10 +264,10 @@ async def generate_video(request: GenerateRequest):
             "settings": request.settings.model_dump(),
             "model": request.settings.model,
             # pipeline extras
-            "frame_url": request.frame_url if request.settings.model == ModelType.SEEDREAM_KLING else None,
+            "frame_url": request.frame_url if request.settings.model == ModelType.SEEDREAM_RUNWAY else None,
             "pipeline_stage": result.get("pipeline_stage"),
             "seedream_task_id": result.get("seedream_task_id"),
-            "kling_task_id": None,
+            "runway_task_id": None,
             "intermediate_url": None,
             "result_urls": []
         }
@@ -348,7 +348,7 @@ async def get_task_status(task_id: str):
                 model_used=model
             )
 
-        # Pipeline flow: Seedream 4 Edit → Kling 2.5 Pro
+        # Pipeline flow: Seedream 4 Edit → Runway Act Two
         pipeline_stage = task_data.get("pipeline_stage", PipelineStage.IMAGE_EDIT_STARTED)
 
         # Stage 1: Check Seedream Edit
@@ -378,10 +378,13 @@ async def get_task_status(task_id: str):
                 task_data["intermediate_url"] = intermediate_url
                 task_data["pipeline_stage"] = PipelineStage.IMAGE_EDIT_COMPLETED
 
-                video_result = await freepik_client.create_kling_task(
-                    input_image_url=intermediate_url,
-                    generation_prompt="Ultra realistic video of a girl smiling and dancing, cinematic lighting",
-                    duration="5"
+                video_result = await freepik_client.create_task(
+                    character_url=intermediate_url,
+                    reference_url=task_data.get("reference_url"),
+                    ratio=task_data.get("settings", {}).get("ratio"),
+                    expression_intensity=task_data.get("settings", {}).get("expression_intensity", 3),
+                    body_control=task_data.get("settings", {}).get("body_control", True),
+                    seed=task_data.get("settings", {}).get("seed")
                 )
 
                 if not video_result.get("success"):
@@ -389,7 +392,7 @@ async def get_task_status(task_id: str):
                     tasks[task_id] = task_data
                     raise HTTPException(status_code=500, detail=video_result.get("error"))
 
-                task_data["kling_task_id"] = video_result["task_id"]
+                task_data["runway_task_id"] = video_result["task_id"]
                 task_data["pipeline_stage"] = PipelineStage.VIDEO_STARTED
                 task_data["status"] = video_result["status"]
                 tasks[task_id] = task_data
@@ -431,8 +434,8 @@ async def get_task_status(task_id: str):
 
         # Stage 2: Check Kling
         if pipeline_stage == PipelineStage.VIDEO_STARTED:
-            kling_task_id = task_data.get("kling_task_id")
-            video_result = await freepik_client.get_task_status(kling_task_id, model="kling_v2_5_pro")
+            runway_task_id = task_data.get("runway_task_id")
+            video_result = await freepik_client.get_task_status(runway_task_id, model="runway_act_two")
 
             if not video_result.get("success"):
                 if video_result.get("transient"):

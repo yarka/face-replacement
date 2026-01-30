@@ -4,7 +4,7 @@ const POLL_INTERVAL = 3000; // 3 seconds
 
 const MODELS = {
     RUNWAY: 'runway_act_two',
-    PIPELINE: 'seedream_kling'
+    PIPELINE: 'seedream_runway'
 };
 
 // Presets Configuration

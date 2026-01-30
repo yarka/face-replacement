@@ -9,7 +9,7 @@ from enum import Enum
 class ModelType(str, Enum):
     """Поддерживаемые AI модели"""
     RUNWAY_ACT_TWO = "runway_act_two"
-    SEEDREAM_KLING = "seedream_kling"
+    SEEDREAM_RUNWAY = "seedream_runway"
 
 
 class PipelineStage(str, Enum):
