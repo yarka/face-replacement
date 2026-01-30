@@ -1,6 +1,6 @@
 # 🎬 Character Replacement MVP
 
-Transform characters in videos using AI-powered face replacement technology. Upload a character image and a reference video, and let the Runway Act Two API do the magic.
+Transform characters in videos using AI-powered face replacement. Use Runway Act Two directly, or a 3-step pipeline (Seedream 4 Edit → Runway Act Two) for stronger identity transfer.
 
 <div align="center">
   <strong>Presets • Gallery • Before/After Comparison</strong>
@@ -12,8 +12,9 @@ Transform characters in videos using AI-powered face replacement technology. Upl
 
 ### Core Functionality
 - **Face Replacement** - Transform faces in videos with precision
-- **Dual Upload Modes** - Upload files or paste URLs directly
-- **Real-time Progress** - Live status updates with visual feedback
+- **URL Inputs** - Paste image/video URLs (file upload UI is currently disabled)
+- **Model Selection** - Runway Act Two (single step) or Seedream 4 Edit + Runway Act Two (3 steps)
+- **Real-time Progress** - Live status updates with pipeline stages
 - **Download Results** - Export generated videos in MP4 format
 
 ### Polish & UX Features
@@ -34,14 +35,16 @@ Transform characters in videos using AI-powered face replacement technology. Upl
 **Backend:**
 - Python 3.8+
 - FastAPI with async support
-- Cloudinary for reliable file storage
-- Freepik Runway Act Two API for video generation
+- Freepik Runway Act Two for video generation
+- Seedream 4 Edit for identity replacement in frame (pipeline mode)
+- Cloudinary upload endpoint (optional; UI currently uses URLs)
 
 **Frontend:**
 - Vanilla JavaScript (no dependencies)
 - CSS3 with animations and responsive design
 - localStorage for gallery persistence
 - HTML5 with semantic markup
+- Client-side frame extraction for pipeline mode
 
 ---
 
@@ -50,8 +53,8 @@ Transform characters in videos using AI-powered face replacement technology. Upl
 ### Prerequisites
 - Python 3.8+ with pip
 - Modern web browser
-- Cloudinary account (free tier available)
 - Freepik API key
+- Cloudinary account (required by backend validation even if you use URL-only mode)
 
 ### 1. Get Cloudinary Credentials
 
@@ -80,6 +83,7 @@ cp .env.example .env
 
 **backend/.env:**
 ```env
+MOCK_MODE=false
 FREEPIK_API_KEY=your_api_key_here
 CLOUDINARY_CLOUD_NAME=your_cloud_name
 CLOUDINARY_API_KEY=your_api_key
@@ -110,13 +114,14 @@ Frontend: [http://localhost:3000](http://localhost:3000)
 ### 5. Use the App
 
 1. Open [http://localhost:3000](http://localhost:3000)
-2. Upload character image (JPG, PNG, WebP) or paste URL
-3. Upload reference video (MP4, MOV) or paste URL
-4. *(Optional)* Apply a preset or customize settings
-5. Click "🚀 Generate Video"
-6. Wait for generation to complete
-7. Preview using the interactive comparison slider
-8. Download or save to gallery
+2. Paste character image URL (JPG, PNG, WebP)
+3. Paste reference video URL (MP4, MOV)
+4. Select model: **Runway Act Two** or **Seedream 4 Edit + Runway Act Two**
+5. *(Optional)* Apply a preset or customize settings
+6. Click "🚀 Generate Video"
+7. Wait for generation to complete
+8. Preview using the interactive comparison slider
+9. Download or save to gallery
 
 ---
 
@@ -149,7 +154,13 @@ Create generation task
 ```json
 {
   "upload_id": "uuid",
+  "direct_urls": {
+    "character_url": "https://...",
+    "reference_url": "https://..."
+  },
+  "frame_url": "data:image/jpeg;base64,...",
   "settings": {
+    "model": "runway_act_two",
     "ratio": "720:1280",
     "expression_intensity": 3,
     "body_control": true
@@ -174,7 +185,10 @@ Check task status
   "task_id": "uuid",
   "status": "READY",
   "result_urls": ["https://..."],
-  "progress_stage": "Ready"
+  "progress_stage": "Ready",
+  "pipeline_stage": "VIDEO_STARTED",
+  "intermediate_url": "https://...",
+  "model_used": "seedream_runway"
 }
 ```
 
@@ -190,7 +204,7 @@ character-replacement-mvp/
 │   ├── config.py                  # Environment configuration
 │   ├── services/
 │   │   ├── cloudinary_service.py  # Cloudinary upload/storage
-│   │   └── freepik_service.py     # Runway API client
+│   │   └── freepik_service.py     # Runway + Seedream API client
 │   ├── requirements.txt           # Python dependencies
 │   └── .env.example               # Environment template
 │
