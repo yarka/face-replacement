@@ -6,6 +6,24 @@ from typing import Optional, List
 from enum import Enum
 
 
+class ModelType(str, Enum):
+    """Поддерживаемые AI модели"""
+    RUNWAY_ACT_TWO = "runway_act_two"
+    SEEDREAM_KLING = "seedream_kling"
+
+
+class PipelineStage(str, Enum):
+    """Этапы pipeline для multi-step генерации"""
+    FRAME_EXTRACTION = "FRAME_EXTRACTION"  # Шаг 1: Извлечение кадра из видео
+    FRAME_UPLOADED = "FRAME_UPLOADED"  # Кадр загружен в Cloudinary
+    IMAGE_EDIT_STARTED = "IMAGE_EDIT_STARTED"  # Шаг 2: Редактирование кадра (Seedream Edit)
+    IMAGE_EDIT_COMPLETED = "IMAGE_EDIT_COMPLETED"
+    VIDEO_STARTED = "VIDEO_STARTED"  # Шаг 3: Генерация видео (Kling)
+    VIDEO_COMPLETED = "VIDEO_COMPLETED"
+    PIPELINE_COMPLETED = "PIPELINE_COMPLETED"
+    FAILED = "FAILED"
+
+
 class AspectRatio(str, Enum):
     """Supported aspect ratios - Freepik format"""
     WIDESCREEN_16_9 = "1280:720"     # 16:9
@@ -18,6 +36,7 @@ class AspectRatio(str, Enum):
 
 class GenerationSettings(BaseModel):
     """Settings for video generation"""
+    model: ModelType = Field(default=ModelType.RUNWAY_ACT_TWO)
     ratio: AspectRatio = Field(default=AspectRatio.WIDESCREEN_16_9)
     expression_intensity: int = Field(default=3, ge=1, le=5)
     body_control: bool = Field(default=True)
@@ -42,6 +61,7 @@ class GenerateRequest(BaseModel):
     upload_id: Optional[str] = Field(default=None, description="Upload ID from /api/upload")
     direct_urls: Optional[DirectUrls] = Field(default=None, description="Direct URLs (skip upload)")
     settings: GenerationSettings
+    frame_url: Optional[str] = Field(default=None, description="URL извлечённого кадра для pipeline")
 
     def model_post_init(self, __context):
         """Validate that either upload_id or direct_urls is provided"""
@@ -74,6 +94,11 @@ class StatusResponse(BaseModel):
     status: TaskStatus
     result_urls: List[str] = Field(default_factory=list)
     progress_stage: Optional[str] = None
+    # Новые поля для pipeline
+    pipeline_stage: Optional[PipelineStage] = None
+    frame_url: Optional[str] = None  # URL извлечённого кадра
+    intermediate_url: Optional[str] = None  # URL после Seedream Edit (новая картинка)
+    model_used: Optional[ModelType] = None
 
 
 class ErrorResponse(BaseModel):

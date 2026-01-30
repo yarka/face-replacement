@@ -24,14 +24,14 @@
         <section id="upload-section" class="section">
             <h2>1. Загрузите файлы или вставьте ссылки</h2>
 
-            <!-- Mode Toggle -->
-            <div class="mode-toggle">
-                <button id="mode-file" class="mode-btn active">📁 Загрузить файлы</button>
-                <button id="mode-url" class="mode-btn">🔗 Вставить ссылки</button>
+            <!-- Mode Toggle (hidden, only URL mode enabled) -->
+            <div class="mode-toggle hidden" style="display:none">
+                <button id="mode-file" class="mode-btn">📁 Загрузить файлы</button>
+                <button id="mode-url" class="mode-btn active">🔗 Вставить ссылки</button>
             </div>
 
             <!-- File Upload Mode -->
-            <div id="file-mode" class="upload-mode">
+            <div id="file-mode" class="upload-mode hidden">
                 <div class="upload-grid">
                 <!-- Character Image Upload -->
                 <div class="upload-box">
@@ -73,7 +73,7 @@
             </div>
 
             <!-- URL Mode -->
-            <div id="url-mode" class="upload-mode hidden">
+            <div id="url-mode" class="upload-mode">
                 <div class="url-inputs">
                     <div class="url-input-box">
                         <label for="character-url-input">🖼️ Character Image URL:</label>
@@ -110,9 +110,36 @@
             </div>
         </section>
 
+        <!-- Model Selection -->
+        <section id="model-section" class="section">
+            <h2>2. Выберите модель</h2>
+            <div class="model-selection">
+                <label class="model-option">
+                    <input type="radio" name="model" value="runway_act_two" checked>
+                    <div class="model-label">
+                        <div>
+                            <div class="model-title">RunWay Act Two</div>
+                            <div class="model-desc">Одношаговая замена лица. Быстро и просто.</div>
+                        </div>
+                        <span class="model-badge">Single-step</span>
+                    </div>
+                </label>
+                <label class="model-option">
+                    <input type="radio" name="model" value="seedream_kling">
+                    <div class="model-label">
+                        <div>
+                            <div class="model-title">Seedream 4 Edit + Kling 2.5 Pro</div>
+                            <div class="model-desc">3-этапный pipeline: редактирование кадра + генерация видео.</div>
+                        </div>
+                        <span class="model-badge pipeline">3-step pipeline</span>
+                    </div>
+                </label>
+            </div>
+        </section>
+
         <!-- Presets Section -->
-        <section id="presets-section" class="section hidden">
-            <h2>⚡ Quick Presets</h2>
+        <section id="presets-section" class="section">
+            <h2>3. Quick Presets</h2>
             <p class="hint">Выберите готовый пресет для быстрой настройки</p>
 
             <div class="presets-grid">
@@ -151,8 +178,8 @@
         </section>
 
         <!-- Settings Section -->
-        <section id="settings-section" class="section hidden">
-            <h2>3. Настройки (опционально)</h2>
+        <section id="settings-section" class="section">
+            <h2>4. Настройки (опционально)</h2>
 
             <div class="settings-grid">
                 <!-- Aspect Ratio -->
@@ -202,6 +229,37 @@
                 </div>
                 <p id="status-text" class="status-text">Загрузка...</p>
                 <p class="hint">Это может занять несколько минут</p>
+            </div>
+
+            <div id="pipeline-progress" class="pipeline-progress hidden">
+                <div class="pipeline-step" id="step-frame">
+                    <div class="pipeline-icon" id="step-frame-indicator">⏳</div>
+                    <div>
+                        <div class="pipeline-title">Шаг 1: Извлечение кадра</div>
+                        <div class="pipeline-status" id="step-frame-status">Ожидание...</div>
+                    </div>
+                </div>
+                <div class="pipeline-connector"></div>
+                <div class="pipeline-step" id="step-nano-banana">
+                    <div class="pipeline-icon" id="step-nano-indicator">⏸️</div>
+                    <div>
+                        <div class="pipeline-title">Шаг 2: Seedream 4 Edit (замена персонажа)</div>
+                        <div class="pipeline-status" id="step-nano-status">Ожидание...</div>
+                    </div>
+                </div>
+                <div class="pipeline-connector"></div>
+                <div class="pipeline-step" id="step-veo3">
+                    <div class="pipeline-icon" id="step-veo-indicator">⏸️</div>
+                    <div>
+                        <div class="pipeline-title">Шаг 3: Kling 2.5 Pro (генерация видео)</div>
+                        <div class="pipeline-status" id="step-veo-status">Ожидание...</div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="intermediate-preview" class="intermediate-preview hidden">
+                <div class="pipeline-title">Промежуточный результат (после Seedream Edit)</div>
+                <img id="intermediate-image" class="preview-image" alt="Intermediate result">
             </div>
         </section>
 
@@ -269,7 +327,7 @@
 
     <!-- Gallery Modal -->
     <div id="gallery-modal" class="modal hidden">
-        <div class="modal-overlay" id="gallery-overlay"></div>
+        <div class="modal-overlay" id="gallery-overlay" onclick="closeGallery()"></div>
         <div class="modal-content gallery-modal-content">
             <div class="modal-header">
                 <h2>📸 Generation History</h2>
@@ -289,11 +347,11 @@
 
     <!-- Gallery Item Detail Modal -->
     <div id="gallery-detail-modal" class="modal hidden">
-        <div class="modal-overlay" id="detail-overlay"></div>
+        <div class="modal-overlay" id="detail-overlay" onclick="closeDetailModal()"></div>
         <div class="modal-content detail-modal-content">
             <div class="modal-header">
                 <h2>Video Details</h2>
-                <button class="modal-close" id="detail-close">✕</button>
+                <button class="modal-close" id="detail-close" onclick="closeDetailModal()">✕</button>
             </div>
             <div class="modal-body" id="detail-body">
                 <!-- Detail content will be inserted here -->

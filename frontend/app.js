@@ -2,6 +2,11 @@
 const API_BASE_URL = 'http://localhost:8000';
 const POLL_INTERVAL = 3000; // 3 seconds
 
+const MODELS = {
+    RUNWAY: 'runway_act_two',
+    PIPELINE: 'seedream_kling'
+};
+
 // Presets Configuration
 const PRESETS = {
     tiktok: {
@@ -39,18 +44,25 @@ const PRESETS = {
 };
 
 // State
-let currentMode = 'file'; // 'file' or 'url'
+let currentMode = 'url'; // fixed to url mode
 let characterFile = null;
 let referenceFile = null;
 let uploadId = null;
 let taskId = null;
 let pollingTimer = null;
+let selectedModel = MODELS.RUNWAY;
+let frameUrl = null;           // uploaded frame URL for pipeline
+let intermediateUrl = null;    // result after Seedream Edit
+let currentCharacterUrl = null;
+let currentReferenceUrl = null;
 
 // DOM Elements
 const modeFileBtn = document.getElementById('mode-file');
 const modeUrlBtn = document.getElementById('mode-url');
 const fileMode = document.getElementById('file-mode');
 const urlMode = document.getElementById('url-mode');
+const modelSection = document.getElementById('model-section');
+const modelRadios = document.querySelectorAll('input[name="model"]');
 
 const characterInput = document.getElementById('character-input');
 const referenceInput = document.getElementById('reference-input');
@@ -72,6 +84,18 @@ const settingsSection = document.getElementById('settings-section');
 const statusSection = document.getElementById('status-section');
 const resultSection = document.getElementById('result-section');
 const errorSection = document.getElementById('error-section');
+const pipelineProgress = document.getElementById('pipeline-progress');
+const stepFrame = document.getElementById('step-frame');
+const stepNano = document.getElementById('step-nano-banana');
+const stepVeo = document.getElementById('step-veo3');
+const stepFrameIndicator = document.getElementById('step-frame-indicator');
+const stepNanoIndicator = document.getElementById('step-nano-indicator');
+const stepVeoIndicator = document.getElementById('step-veo-indicator');
+const stepFrameStatus = document.getElementById('step-frame-status');
+const stepNanoStatus = document.getElementById('step-nano-status');
+const stepVeoStatus = document.getElementById('step-veo-status');
+const intermediatePreview = document.getElementById('intermediate-preview');
+const intermediateImage = document.getElementById('intermediate-image');
 
 // Gallery DOM elements
 const galleryBtn = document.getElementById('gallery-btn');
@@ -99,18 +123,27 @@ const toggleComparisonBtn = document.getElementById('toggle-comparison');
 // Comparison state
 let currentView = 'comparison'; // 'comparison' or 'single'
 let isComparisonPlaying = false;
-let currentReferenceUrl = null;
 let currentResultUrl = null;
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
     setupEventListeners();
+    // safety: make sure modals are closed on first load
+    closeGallery();
+    closeDetailModal();
+    // force URL mode visible, hide file mode
+    switchMode('url');
 });
 
 function setupEventListeners() {
-    // Mode toggle
-    modeFileBtn.addEventListener('click', () => switchMode('file'));
-    modeUrlBtn.addEventListener('click', () => switchMode('url'));
+    // Mode toggle removed (URL only)
+
+    // Model selection
+    modelRadios.forEach(radio => {
+        radio.addEventListener('change', (e) => {
+            selectedModel = e.target.value;
+        });
+    });
 
     // File inputs
     characterInput.addEventListener('change', (e) => handleFileSelect(e, 'character'));
@@ -145,6 +178,10 @@ function setupEventListeners() {
     detailClose.addEventListener('click', closeDetailModal);
     detailOverlay.addEventListener('click', closeDetailModal);
 
+    // Ensure modals are closed on load
+    galleryModal.classList.add('hidden');
+    galleryDetailModal.classList.add('hidden');
+
     // Comparison
     toggleViewBtn.addEventListener('click', () => toggleView('single'));
     toggleComparisonBtn.addEventListener('click', () => toggleView('comparison'));
@@ -158,43 +195,13 @@ function setupEventListeners() {
 function switchMode(mode) {
     currentMode = mode;
 
-    if (mode === 'file') {
-        modeFileBtn.classList.add('active');
-        modeUrlBtn.classList.remove('active');
-        fileMode.classList.remove('hidden');
-        urlMode.classList.add('hidden');
-
-        // Check if files are selected
-        if (characterFile && referenceFile) {
-            presetsSection.classList.remove('hidden');
-            settingsSection.classList.remove('hidden');
-        } else {
-            presetsSection.classList.add('hidden');
-            settingsSection.classList.add('hidden');
-        }
-    } else {
-        modeUrlBtn.classList.add('active');
-        modeFileBtn.classList.remove('active');
-        urlMode.classList.remove('hidden');
-        fileMode.classList.add('hidden');
-
-        // Check if URLs are filled
-        checkUrlInputs();
-    }
+    // Only URL mode is allowed
+    urlMode.classList.remove('hidden');
+    fileMode.classList.add('hidden');
 }
 
 function checkUrlInputs() {
-    const charUrl = characterUrlInput.value.trim();
-    const refUrl = referenceUrlInput.value.trim();
-
-    if (charUrl && refUrl) {
-        presetsSection.classList.remove('hidden');
-        settingsSection.classList.remove('hidden');
-        presetsSection.scrollIntoView({ behavior: 'smooth' });
-    } else {
-        presetsSection.classList.add('hidden');
-        settingsSection.classList.add('hidden');
-    }
+    // Sections always visible; validation happens on generate
 }
 
 // File Selection
@@ -249,78 +256,85 @@ function showPreview(file, container, type) {
 
 // Generate Video
 async function handleGenerate() {
+    console.log('handleGenerate: click');
+    showToast('Запускаю генерацию...');
     try {
         generateBtn.disabled = true;
+        pipelineProgress.classList.add('hidden');
+        intermediatePreview.classList.add('hidden');
+        frameUrl = null;
+        intermediateUrl = null;
 
         const settings = {
             ratio: document.getElementById('ratio-select').value,
             expression_intensity: parseInt(intensitySlider.value),
-            body_control: document.getElementById('body-control').checked
+            body_control: document.getElementById('body-control').checked,
+            model: selectedModel
         };
 
         let requestBody;
+        let referencePlayableUrl = null;
 
-        if (currentMode === 'file') {
-            // File mode: Upload files first
-            if (!characterFile || !referenceFile) {
-                showError('Пожалуйста, загрузите оба файла');
-                generateBtn.disabled = false;
-                return;
-            }
+        // URL mode only
+        const charUrl = characterUrlInput.value.trim();
+        const refUrl = referenceUrlInput.value.trim();
 
-            generateBtn.textContent = 'Загрузка файлов...';
+        if (!charUrl || !refUrl) {
+            showError('Пожалуйста, заполните оба URL');
+            generateBtn.disabled = false;
+            return;
+        }
 
-            // Step 1: Upload files
-            const formData = new FormData();
-            formData.append('character', characterFile);
-            formData.append('reference', referenceFile);
+        // Basic URL validation
+        try {
+            new URL(charUrl);
+            new URL(refUrl);
+        } catch (e) {
+            showError('Пожалуйста, введите корректные URL');
+            generateBtn.disabled = false;
+            return;
+        }
 
-            const uploadResponse = await fetch(`${API_BASE_URL}/api/upload`, {
-                method: 'POST',
-                body: formData
-            });
+        if (!isLikelyImageUrl(charUrl)) {
+            showError('Character Image URL должен быть ссылкой на картинку (jpg/png/webp)');
+            generateBtn.disabled = false;
+            return;
+        }
+        if (!isLikelyVideoUrl(refUrl)) {
+            showError('Reference Video URL должен быть ссылкой на видео (mp4/mov)');
+            generateBtn.disabled = false;
+            return;
+        }
 
-            if (!uploadResponse.ok) {
-                const error = await uploadResponse.json();
-                throw new Error(error.error || 'Upload failed');
-            }
-
-            const uploadData = await uploadResponse.json();
-            uploadId = uploadData.upload_id;
-
-            requestBody = {
-                upload_id: uploadId,
-                settings: settings
-            };
-
+        if (selectedModel === MODELS.PIPELINE) {
+            updatePipelineProgress('FRAME_EXTRACTION');
+            generateBtn.textContent = 'Извлекаем кадр...';
+            referencePlayableUrl = refUrl;
+            const frameBlob = await extractVideoFrame(refUrl);
+            generateBtn.textContent = 'Подготовка кадра...';
+            frameUrl = await blobToBase64(frameBlob);
+            updatePipelineProgress('FRAME_UPLOADED');
         } else {
-            // URL mode: Use direct URLs
-            const charUrl = characterUrlInput.value.trim();
-            const refUrl = referenceUrlInput.value.trim();
+            pipelineProgress.classList.add('hidden');
+        }
 
-            if (!charUrl || !refUrl) {
-                showError('Пожалуйста, заполните оба URL');
-                generateBtn.disabled = false;
-                return;
+        requestBody = {
+            direct_urls: {
+                character_url: charUrl,
+                reference_url: refUrl
+            },
+            settings: settings
+        };
+
+        currentCharacterUrl = charUrl;
+        currentReferenceUrl = refUrl;
+
+        // Add frame_url for pipeline model
+        if (selectedModel === MODELS.PIPELINE) {
+            if (!frameUrl) {
+                throw new Error('Не удалось получить кадр из видео для pipeline модели');
             }
-
-            // Basic URL validation
-            try {
-                new URL(charUrl);
-                new URL(refUrl);
-            } catch (e) {
-                showError('Пожалуйста, введите корректные URL');
-                generateBtn.disabled = false;
-                return;
-            }
-
-            requestBody = {
-                direct_urls: {
-                    character_url: charUrl,
-                    reference_url: refUrl
-                },
-                settings: settings
-            };
+            requestBody.frame_url = frameUrl;
         }
 
         // Step 2: Start generation
@@ -344,6 +358,9 @@ async function handleGenerate() {
 
         // Step 3: Show status section and start polling
         showSection('status');
+        if (selectedModel !== MODELS.PIPELINE) {
+            pipelineProgress.classList.add('hidden');
+        }
         startPolling();
 
     } catch (error) {
@@ -356,7 +373,14 @@ async function handleGenerate() {
 
 // Polling
 function startPolling() {
-    updateStatus('Uploaded', 25);
+    if (selectedModel === MODELS.PIPELINE) {
+        pipelineProgress.classList.remove('hidden');
+        updatePipelineProgress('IMAGE_EDIT_STARTED');
+        updateStatus('Seedream Edit: запуск', 30);
+    } else {
+        updateStatus('Uploaded', 25);
+        pipelineProgress.classList.add('hidden');
+    }
     pollingTimer = setInterval(checkStatus, POLL_INTERVAL);
     checkStatus(); // Check immediately
 }
@@ -379,30 +403,63 @@ async function checkStatus() {
 
         const data = await response.json();
         const status = data.status;
-        const progressStage = data.progress_stage;
+        const modelUsed = data.model_used || selectedModel;
 
-        // Update progress
-        const progressMap = {
-            'Uploaded': 25,
-            'In Progress': 40,
-            'Processing': 50,
-            'Finalizing': 75,
-            'Ready': 100,
-            'Failed': 0
-        };
+        if (modelUsed === MODELS.PIPELINE) {
+            const stage = data.pipeline_stage || 'IMAGE_EDIT_STARTED';
+            updatePipelineProgress(stage, data);
 
-        updateStatus(progressStage, progressMap[progressStage] || 50);
+            // Map pipeline stages to progress bar
+            const pipelineProgressMap = {
+                'FRAME_EXTRACTION': 15,
+                'FRAME_UPLOADED': 25,
+                'IMAGE_EDIT_STARTED': 40,
+                'IMAGE_EDIT_COMPLETED': 60,
+                'VIDEO_STARTED': 80,
+                'PIPELINE_COMPLETED': 100,
+                'FAILED': 0
+            };
+            updateStatus(stage, pipelineProgressMap[stage] || 40);
 
-        // Handle completion
-        if (status === 'READY' || status === 'COMPLETED') {
-            stopPolling();
-            const videoUrl = data.result_urls[0];
-            showResult(videoUrl);
-            // Save to gallery
-            saveToGallery(videoUrl);
-        } else if (status === 'FAILED') {
-            stopPolling();
-            showError('Генерация не удалась. Попробуйте с другими настройками или файлами.');
+            if (data.intermediate_url) {
+                intermediateUrl = data.intermediate_url;
+                intermediateImage.src = intermediateUrl;
+                intermediatePreview.classList.remove('hidden');
+            }
+
+            if (status === 'COMPLETED') {
+                stopPolling();
+                const videoUrl = data.result_urls[0];
+                showResult(videoUrl, modelUsed, intermediateUrl);
+                saveToGallery(videoUrl, modelUsed, intermediateUrl);
+            } else if (status === 'FAILED') {
+                stopPolling();
+                showError('Pipeline завершился с ошибкой. Попробуйте снова.');
+            }
+        } else {
+            const progressStage = data.progress_stage;
+            const progressMap = {
+                'Uploaded': 25,
+                'In Progress': 40,
+                'Processing': 50,
+                'Finalizing': 75,
+                'Ready': 100,
+                'COMPLETED': 100,
+                'Failed': 0
+            };
+
+            pipelineProgress.classList.add('hidden');
+            updateStatus(progressStage, progressMap[progressStage] || 50);
+
+            if (status === 'READY' || status === 'COMPLETED') {
+                stopPolling();
+                const videoUrl = data.result_urls[0];
+                showResult(videoUrl, modelUsed);
+                saveToGallery(videoUrl, modelUsed);
+            } else if (status === 'FAILED') {
+                stopPolling();
+                showError('Генерация не удалась. Попробуйте с другими настройками или файлами.');
+            }
         }
 
     } catch (error) {
@@ -417,18 +474,177 @@ function updateStatus(text, progress) {
     document.getElementById('progress-fill').style.width = `${progress}%`;
 }
 
+// Pipeline progress UI
+function updatePipelineProgress(stage, data = {}) {
+    pipelineProgress.classList.remove('hidden');
+
+    // reset classes
+    [stepFrame, stepNano, stepVeo].forEach(step => {
+        step.classList.remove('active', 'complete');
+    });
+
+    switch (stage) {
+        case 'FRAME_EXTRACTION':
+            stepFrame.classList.add('active');
+            stepFrameIndicator.textContent = '⏳';
+            stepFrameStatus.textContent = 'Извлечение кадра...';
+            stepNanoIndicator.textContent = '⏸️';
+            stepNanoStatus.textContent = 'Ожидание...';
+            stepVeoIndicator.textContent = '⏸️';
+            stepVeoStatus.textContent = 'Ожидание...';
+            break;
+        case 'FRAME_UPLOADED':
+        case 'IMAGE_EDIT_STARTED':
+            stepFrame.classList.add('complete');
+            stepFrameIndicator.textContent = '✅';
+            stepFrameStatus.textContent = 'Кадр готов';
+            stepNano.classList.add('active');
+            stepNanoIndicator.textContent = '⏳';
+            stepNanoStatus.textContent = 'Редактирование кадра...';
+            stepVeoIndicator.textContent = '⏸️';
+            stepVeoStatus.textContent = 'Ожидание...';
+            break;
+        case 'IMAGE_EDIT_COMPLETED':
+        case 'VIDEO_STARTED':
+            stepFrame.classList.add('complete');
+            stepFrameIndicator.textContent = '✅';
+            stepNano.classList.add('complete');
+            stepNanoIndicator.textContent = '✅';
+            stepNanoStatus.textContent = 'Кадр готов';
+            stepVeo.classList.add('active');
+            stepVeoIndicator.textContent = '⏳';
+            stepVeoStatus.textContent = 'Генерация видео...';
+            if (data.intermediate_url) {
+                intermediateUrl = data.intermediate_url;
+                intermediateImage.src = intermediateUrl;
+                intermediatePreview.classList.remove('hidden');
+            }
+            break;
+        case 'PIPELINE_COMPLETED':
+            stepFrame.classList.add('complete');
+            stepNano.classList.add('complete');
+            stepVeo.classList.add('complete');
+            stepFrameIndicator.textContent = '✅';
+            stepNanoIndicator.textContent = '✅';
+            stepVeoIndicator.textContent = '✅';
+            stepFrameStatus.textContent = 'Готово';
+            stepNanoStatus.textContent = 'Готово';
+            stepVeoStatus.textContent = 'Видео готово';
+            break;
+        case 'FAILED':
+            stepNanoStatus.textContent = 'Ошибка';
+            stepVeoStatus.textContent = 'Ошибка';
+            stepNanoIndicator.textContent = '⚠️';
+            stepVeoIndicator.textContent = '⚠️';
+            break;
+    }
+}
+
+async function extractVideoFrame(videoSrc) {
+    return new Promise((resolve, reject) => {
+        const video = document.createElement('video');
+        video.crossOrigin = 'anonymous';
+        video.src = videoSrc;
+        video.muted = true;
+        video.playsInline = true;
+
+        const cleanup = () => {
+            video.pause();
+            video.removeAttribute('src');
+            video.load();
+        };
+
+        video.addEventListener('loadeddata', () => {
+            // Seek a bit into the video to avoid black frames
+            const targetTime = Math.min(0.2, video.duration ? Math.min(0.2, video.duration / 4) : 0.2);
+            video.currentTime = targetTime;
+        }, { once: true });
+
+        video.addEventListener('seeked', () => {
+            try {
+                const canvas = document.createElement('canvas');
+                canvas.width = video.videoWidth || 1280;
+                canvas.height = video.videoHeight || 720;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                canvas.toBlob((blob) => {
+                    if (!blob) {
+                        cleanup();
+                        reject(new Error('Не удалось получить кадр из видео'));
+                        return;
+                    }
+                    cleanup();
+                    resolve(blob);
+                }, 'image/jpeg', 0.9);
+            } catch (err) {
+                cleanup();
+                reject(err);
+            }
+        }, { once: true });
+
+        video.addEventListener('error', () => {
+            cleanup();
+            reject(new Error('Не удалось загрузить видео для извлечения кадра (возможно, CORS)'));
+        }, { once: true });
+    });
+}
+
+async function uploadFrameToCloudinary(frameBlob) {
+    const formData = new FormData();
+    formData.append('file', frameBlob, 'frame.jpg');
+
+    const res = await fetch(`${API_BASE_URL}/api/upload-frame`, {
+        method: 'POST',
+        body: formData
+    });
+
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Не удалось загрузить кадр на сервер');
+    }
+
+    const data = await res.json();
+    return data.frame_url;
+}
+
+async function blobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            const result = reader.result;
+            if (!result || typeof result !== 'string') {
+                reject(new Error('Не удалось подготовить кадр'));
+                return;
+            }
+            const base64 = result.split(',')[1] || result;
+            resolve(base64);
+        };
+        reader.onerror = () => reject(new Error('Не удалось подготовить кадр'));
+        reader.readAsDataURL(blob);
+    });
+}
+
+function isLikelyImageUrl(url) {
+    const lower = url.toLowerCase().split('?')[0];
+    return ['.jpg', '.jpeg', '.png', '.webp'].some(ext => lower.endsWith(ext));
+}
+
+function isLikelyVideoUrl(url) {
+    const lower = url.toLowerCase().split('?')[0];
+    return ['.mp4', '.mov', '.avi', '.webm'].some(ext => lower.endsWith(ext));
+}
+
 // Show Result
-function showResult(videoUrl) {
+function showResult(videoUrl, modelUsed = MODELS.RUNWAY, intermediate = null) {
     // Store URLs for comparison
     currentResultUrl = videoUrl;
-    currentReferenceUrl = referenceUrl;
 
     // Setup single view
     const resultVideo = document.getElementById('result-video');
     resultVideo.src = videoUrl;
 
     // Setup comparison view
-    referenceComparisonVideo.src = referenceUrl;
+    referenceComparisonVideo.src = currentReferenceUrl || '';
     resultComparisonVideo.src = videoUrl;
 
     // Initialize comparison slider
@@ -438,6 +654,12 @@ function showResult(videoUrl) {
     // Setup download
     downloadBtn.href = videoUrl;
     downloadBtn.download = 'character-replacement-result.mp4';
+
+    if (modelUsed === MODELS.PIPELINE && intermediate) {
+        intermediateUrl = intermediate;
+        intermediateImage.src = intermediate;
+        intermediatePreview.classList.remove('hidden');
+    }
 
     // Show comparison view by default
     toggleView('comparison');
@@ -454,13 +676,14 @@ function showError(message) {
 // UI Helpers
 function showSection(sectionName) {
     // Hide all sections
-    [uploadSection, presetsSection, settingsSection, statusSection, resultSection, errorSection].forEach(section => {
+    [uploadSection, modelSection, presetsSection, settingsSection, statusSection, resultSection, errorSection].forEach(section => {
         section.classList.add('hidden');
     });
 
     // Show requested section
     const sectionMap = {
         'upload': uploadSection,
+        'model': modelSection,
         'settings': settingsSection,
         'status': statusSection,
         'result': resultSection,
@@ -483,16 +706,13 @@ function resetAll() {
     referenceFile = null;
     uploadId = null;
     taskId = null;
+    frameUrl = null;
+    intermediateUrl = null;
+    selectedModel = MODELS.RUNWAY;
+    currentCharacterUrl = null;
+    currentReferenceUrl = null;
 
-    // Reset UI - File mode
-    characterInput.value = '';
-    referenceInput.value = '';
-    characterPreview.innerHTML = '';
-    characterPreview.classList.add('hidden');
-    referencePreview.innerHTML = '';
-    referencePreview.classList.add('hidden');
-
-    // Reset UI - URL mode
+    // Reset URL inputs
     characterUrlInput.value = '';
     referenceUrlInput.value = '';
 
@@ -501,12 +721,13 @@ function resetAll() {
     intensityValue.textContent = '3';
     document.getElementById('ratio-select').value = '1280:720';
     document.getElementById('body-control').checked = true;
+    modelRadios.forEach(r => r.checked = r.value === MODELS.RUNWAY);
 
     generateBtn.disabled = false;
     generateBtn.textContent = '🚀 Сгенерировать видео';
 
-    // Reset to file mode
-    switchMode('file');
+    // Force URL mode
+    switchMode('url');
 
     // Show upload section
     showSection('upload');
@@ -516,6 +737,9 @@ function resetAll() {
     document.querySelectorAll('.preset-btn').forEach(btn => {
         btn.classList.remove('active');
     });
+
+    pipelineProgress.classList.add('hidden');
+    intermediatePreview.classList.add('hidden');
 }
 
 // Preset Application
@@ -568,7 +792,7 @@ function showToast(message) {
 // ================== GALLERY FUNCTIONS ==================
 
 // Save to Gallery
-async function saveToGallery(videoUrl) {
+async function saveToGallery(videoUrl, modelUsed = MODELS.RUNWAY, intermediate = null) {
     try {
         const generations = JSON.parse(localStorage.getItem('generations') || '[]');
 
@@ -577,6 +801,7 @@ async function saveToGallery(videoUrl) {
 
         // Get current settings
         const settings = {
+            model: modelUsed,
             ratio: document.getElementById('ratio-select').value,
             expression_intensity: parseInt(document.getElementById('intensity-slider').value),
             body_control: document.getElementById('body-control').checked
@@ -588,8 +813,8 @@ async function saveToGallery(videoUrl) {
 
         if (currentMode === 'file') {
             // Get from uploads if available
-            characterUrl = uploadId ? `Character from upload ${uploadId}` : '';
-            referenceUrl = uploadId ? `Reference from upload ${uploadId}` : '';
+            characterUrl = currentCharacterUrl || (uploadId ? `Character from upload ${uploadId}` : '');
+            referenceUrl = currentReferenceUrl || (uploadId ? `Reference from upload ${uploadId}` : '');
         } else {
             characterUrl = characterUrlInput.value;
             referenceUrl = referenceUrlInput.value;
@@ -602,6 +827,7 @@ async function saveToGallery(videoUrl) {
             character_url: characterUrl,
             reference_url: referenceUrl,
             result_url: videoUrl,
+            intermediate_url: intermediate,
             settings: settings,
             thumbnail: thumbnail
         };
@@ -696,12 +922,12 @@ function renderGallery(generations) {
     galleryGrid.innerHTML = generations.map(gen => `
         <div class="gallery-item" data-id="${gen.id}">
             <img src="${gen.thumbnail}" alt="Video thumbnail" class="gallery-thumbnail">
-            <div class="gallery-item-info">
-                <div class="gallery-item-date">${formatDate(gen.timestamp)}</div>
-                <div class="gallery-item-settings">
-                    ${gen.settings.ratio} • ${gen.settings.expression_intensity}/5
+                <div class="gallery-item-info">
+                    <div class="gallery-item-date">${formatDate(gen.timestamp)}</div>
+                    <div class="gallery-item-settings">
+                    ${gen.settings.model || 'runway_act_two'} • ${gen.settings.ratio} • ${gen.settings.expression_intensity}/5
+                    </div>
                 </div>
-            </div>
             <div class="gallery-item-actions">
                 <button class="gallery-view-btn" data-id="${gen.id}" title="View">👁️</button>
                 <button class="gallery-delete-btn" data-id="${gen.id}" title="Delete">🗑️</button>
@@ -753,6 +979,9 @@ function showGalleryItem(id) {
                 <strong>Created:</strong> ${formatDate(item.timestamp)}
             </div>
             <div class="detail-row">
+                <strong>Model:</strong> ${item.settings.model || 'runway_act_two'}
+            </div>
+            <div class="detail-row">
                 <strong>Aspect Ratio:</strong> ${item.settings.ratio}
             </div>
             <div class="detail-row">
@@ -761,6 +990,7 @@ function showGalleryItem(id) {
             <div class="detail-row">
                 <strong>Body Control:</strong> ${item.settings.body_control ? 'Yes' : 'No'}
             </div>
+            ${item.intermediate_url ? `<div class="detail-row"><strong>Intermediate:</strong> <a href="${item.intermediate_url}" target="_blank">Open image</a></div>` : ''}
         </div>
         <div class="detail-actions">
             <a href="${item.result_url}" download="video-${id}.mp4" class="btn btn-primary">
