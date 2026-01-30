@@ -105,6 +105,12 @@ class FreepikClient:
                 "details": error_details,
                 "transient": 500 <= e.response.status_code < 600
             }
+        except httpx.RequestError as e:
+            return {
+                "success": False,
+                "error": f"Request error: {str(e)}",
+                "transient": True
+            }
         except Exception as e:
             return {
                 "success": False,
@@ -161,6 +167,12 @@ class FreepikClient:
                 "error": f"HTTP error: {e.response.status_code}",
                 "details": e.response.text,
                 "transient": 500 <= e.response.status_code < 600
+            }
+        except httpx.RequestError as e:
+            return {
+                "success": False,
+                "error": f"Request error: {str(e)}",
+                "transient": True
             }
         except Exception as e:
             return {

@@ -1,6 +1,6 @@
 // API Configuration
 const API_BASE_URL = 'http://localhost:8000';
-const POLL_INTERVAL = 3000; // 3 seconds
+const POLL_INTERVAL = 10000; // 10 seconds
 
 const MODELS = {
     RUNWAY: 'runway_act_two',
@@ -50,6 +50,7 @@ let referenceFile = null;
 let uploadId = null;
 let taskId = null;
 let pollingTimer = null;
+let pollingErrorCount = 0;
 let selectedModel = MODELS.RUNWAY;
 let frameUrl = null;           // uploaded frame URL for pipeline
 let intermediateUrl = null;    // result after Seedream Edit
@@ -373,6 +374,7 @@ async function handleGenerate() {
 
 // Polling
 function startPolling() {
+    pollingErrorCount = 0;
     if (selectedModel === MODELS.PIPELINE) {
         pipelineProgress.classList.remove('hidden');
         updatePipelineProgress('IMAGE_EDIT_STARTED');
@@ -397,11 +399,22 @@ async function checkStatus() {
         const response = await fetch(`${API_BASE_URL}/api/status/${taskId}`);
 
         if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || 'Status check failed');
+            let errorMessage = 'Status check failed';
+            try {
+                const error = await response.json();
+                errorMessage = error.error || error.detail || errorMessage;
+            } catch (parseError) {
+                // ignore JSON parse errors
+            }
+            if (response.status >= 500) {
+                handleTransientPollError(errorMessage);
+                return;
+            }
+            throw new Error(errorMessage);
         }
 
         const data = await response.json();
+        pollingErrorCount = 0;
         const status = data.status;
         const modelUsed = data.model_used || selectedModel;
 
@@ -464,8 +477,16 @@ async function checkStatus() {
 
     } catch (error) {
         console.error('Polling error:', error);
+        handleTransientPollError(error.message);
+    }
+}
+
+function handleTransientPollError(message) {
+    pollingErrorCount += 1;
+    updateStatus(`Временная ошибка: ${message}. Повторяем...`, 50);
+    if (pollingErrorCount >= 5) {
         stopPolling();
-        showError(error.message);
+        showError(message);
     }
 }
 
@@ -563,8 +584,12 @@ async function extractVideoFrame(videoSrc) {
         video.addEventListener('seeked', () => {
             try {
                 const canvas = document.createElement('canvas');
-                canvas.width = video.videoWidth || 1280;
-                canvas.height = video.videoHeight || 720;
+                const maxWidth = 768;
+                const srcWidth = video.videoWidth || 1280;
+                const srcHeight = video.videoHeight || 720;
+                const scale = Math.min(1, maxWidth / srcWidth);
+                canvas.width = Math.round(srcWidth * scale);
+                canvas.height = Math.round(srcHeight * scale);
                 const ctx = canvas.getContext('2d');
                 ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                 canvas.toBlob((blob) => {

@@ -53,6 +53,13 @@ SEEDREAM_ASPECT_MAP = {
 }
 
 
+def coerce_task_status(value: str) -> TaskStatus:
+    """Map unknown status strings to a safe default for API responses."""
+    if value in TaskStatus._value2member_map_:
+        return TaskStatus(value)
+    return TaskStatus.IN_PROGRESS
+
+
 @app.get("/")
 async def root():
     """Health check endpoint"""
@@ -316,7 +323,7 @@ async def get_task_status(task_id: str):
                     }
                     return StatusResponse(
                         task_id=task_id,
-                        status=TaskStatus(status),
+                        status=coerce_task_status(status),
                         result_urls=task_data.get("result_urls", []),
                         progress_stage=progress_stage_map.get(status, status),
                         model_used=model
@@ -342,7 +349,7 @@ async def get_task_status(task_id: str):
 
             return StatusResponse(
                 task_id=task_id,
-                status=TaskStatus(status),
+                status=coerce_task_status(status),
                 result_urls=result_urls,
                 progress_stage=progress_stage_map.get(status, status),
                 model_used=model
@@ -360,7 +367,7 @@ async def get_task_status(task_id: str):
                 if edit_result.get("transient"):
                     return StatusResponse(
                         task_id=task_id,
-                        status=TaskStatus(task_data.get("status", "IN_PROGRESS")),
+                        status=coerce_task_status(task_data.get("status", "IN_PROGRESS")),
                         progress_stage=task_data.get("status", "IN_PROGRESS"),
                         pipeline_stage=pipeline_stage,
                         frame_url=task_data.get("frame_url"),
@@ -378,10 +385,26 @@ async def get_task_status(task_id: str):
                 task_data["intermediate_url"] = intermediate_url
                 task_data["pipeline_stage"] = PipelineStage.IMAGE_EDIT_COMPLETED
 
+                if task_data.get("runway_task_id"):
+                    return StatusResponse(
+                        task_id=task_id,
+                        status=coerce_task_status(task_data.get("status", "IN_PROGRESS")),
+                        progress_stage="VIDEO_STARTED",
+                        pipeline_stage=PipelineStage.VIDEO_STARTED,
+                        frame_url=task_data.get("frame_url"),
+                        intermediate_url=intermediate_url,
+                        result_urls=task_data.get("result_urls", []),
+                        model_used=model
+                    )
+
+                ratio = task_data.get("settings", {}).get("ratio")
+                if hasattr(ratio, "value"):
+                    ratio = ratio.value
+
                 video_result = await freepik_client.create_task(
                     character_url=intermediate_url,
                     reference_url=task_data.get("reference_url"),
-                    ratio=task_data.get("settings", {}).get("ratio"),
+                    ratio=ratio,
                     expression_intensity=task_data.get("settings", {}).get("expression_intensity", 3),
                     body_control=task_data.get("settings", {}).get("body_control", True),
                     seed=task_data.get("settings", {}).get("seed")
@@ -399,7 +422,7 @@ async def get_task_status(task_id: str):
 
                 return StatusResponse(
                     task_id=task_id,
-                    status=TaskStatus(video_result["status"]),
+                    status=coerce_task_status(video_result["status"]),
                     progress_stage="VIDEO_STARTED",
                     pipeline_stage=PipelineStage.VIDEO_STARTED,
                     frame_url=task_data.get("frame_url"),
@@ -425,7 +448,7 @@ async def get_task_status(task_id: str):
             tasks[task_id] = task_data
             return StatusResponse(
                 task_id=task_id,
-                status=TaskStatus(edit_status),
+                status=coerce_task_status(edit_status),
                 progress_stage=edit_status,
                 pipeline_stage=pipeline_stage,
                 frame_url=task_data.get("frame_url"),
@@ -441,7 +464,7 @@ async def get_task_status(task_id: str):
                 if video_result.get("transient"):
                     return StatusResponse(
                         task_id=task_id,
-                        status=TaskStatus(task_data.get("status", "IN_PROGRESS")),
+                        status=coerce_task_status(task_data.get("status", "IN_PROGRESS")),
                         progress_stage=task_data.get("status", "IN_PROGRESS"),
                         pipeline_stage=pipeline_stage,
                         frame_url=task_data.get("frame_url"),
@@ -489,7 +512,7 @@ async def get_task_status(task_id: str):
             tasks[task_id] = task_data
             return StatusResponse(
                 task_id=task_id,
-                status=TaskStatus(video_status),
+                status=coerce_task_status(video_status),
                 progress_stage=video_status,
                 pipeline_stage=PipelineStage.VIDEO_STARTED,
                 intermediate_url=task_data.get("intermediate_url"),
